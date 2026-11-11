@@ -27,7 +27,7 @@ html,body{height:100%}
 body{background:var(--surface);color:var(--on-surface);font-family:var(--font);font-size:14px;line-height:1.45;overflow:hidden;-webkit-tap-highlight-color:transparent}
 *{box-sizing:border-box}
 button,input,textarea{font:inherit;color:inherit}
-button{cursor:pointer;border:0;background:none;padding:0}
+button{cursor:pointer;border:0;background:none;padding:0;touch-action:manipulation}
 button:disabled{cursor:default;opacity:.38}
 :focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 .num{font-family:var(--num);font-variant-numeric:tabular-nums}
@@ -48,7 +48,7 @@ svg.ic{width:20px;height:20px;fill:currentColor;flex:none}
 .tabs button[aria-selected="true"]::after{content:"";position:absolute;left:50%;bottom:0;width:56px;height:3px;border-radius:3px 3px 0 0;background:var(--primary);transform:translateX(-50%)}
 
 /* content */
-#main{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-left:var(--gut-l);padding-right:var(--gut-r);padding-block:0 24px;scroll-behavior:smooth}
+#main{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-left:var(--gut-l);padding-right:var(--gut-r);padding-block:0 24px;overflow-anchor:none}
 .cols{max-width:1180px;margin:0 auto;display:grid;gap:0 24px}
 .col{min-width:0;display:flex;flex-direction:column;gap:12px;padding-bottom:8px;container-type:inline-size}
 .col>h2{display:none;font-size:16px;font-weight:500;margin:16px 0 0;color:var(--on-surface-variant)}
@@ -286,7 +286,7 @@ pre.report{margin:0 auto;max-width:560px;background:var(--surface-container);bor
 .rec .open{border-top:1px solid var(--outline-variant);padding:12px 16px;display:flex;flex-direction:column;gap:12px}
 .rec .open img{max-width:min(100%,440px);margin:0 auto;border-radius:var(--r-m)}
 .empty{text-align:center;color:var(--on-surface-variant);padding:48px 0}
-@media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}#main{scroll-behavior:auto}}
+@media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
 
 </style>
 </head>
@@ -607,7 +607,7 @@ const clone = o => JSON.parse(JSON.stringify(o));
 const CZ0 = () => ({ pts: { mumei: 0, ikoma: 0 }, high: { mumei: false, ikoma: false }, flash: { normal: 0, flash: 0 }, czc: { mumei: 0, ikoma: 0, douran: 0 }, bell: 0, bonus: { rb: 0, bb: 0 }, entry: { mumei: [], ikoma: [] }, minPt: { mumei: 0, ikoma: 0 } });
 const SET0 = () => ({ c: Object.fromEntries(ALLKEYS.map(k => [k, 0])), chara: [0, 1, 2].map(() => ({ chara_female: 0, chara_male: 0, chara_biba: 0 })) });
 const LOG0 = () => ({ reason: 'none', sub: { unato: false, sakura: false }, period: 1, g: 0, entries: [] });
-const REASONS = [['none', '通常'], ['reset', '朝イチ(設定変更)'], ['through', 'エピボ駆け抜け後'], ['kage', '上位ST終了後']];
+const REASONS = [['none', '通常'], ['reset', '朝イチ(設定変更)'], ['through', 'ST駆け抜け後'], ['kage', '上位ST終了後']];
 const SUBS = [['unato', '海門城'], ['sakura', '桜']];
 // 天井は「状態」と「サブ液晶の背景」のどれか1つでも該当すれば短縮（4周期・596G）
 const ceilOf = L => (L.reason !== 'none' || L.sub.unato || L.sub.sakura ? { p: 4, g: 596 } : { p: 6, g: 996 });
@@ -844,8 +844,8 @@ function saveEntry() {
   S.ui.entry = null;
   if (!isNew) { L.entries = L.entries.map(x => (x.id === e.id ? e : x)); return push('log', L, `${BONUS_NAME[e.bonus]}の記録を修正`); }
   L.entries.push(e);
-  if (e.result === 'st') { L.period = 1; L.g = 0; // 天井短縮になるのは 上位ST終了後 / エピソードボーナスからのST駆け抜け後（と設定変更時）だけ。駿城ボーナス経由の通常STは駆け抜けでも通常天井
-    L.reason = e.stType !== 'normal' ? 'kage' : e.bonus === 'episode' && e.chain === 0 ? 'through' : 'none'; L.sub = { unato: false, sakura: false }; }
+  if (e.result === 'st') { L.period = 1; L.g = 0; // 天井短縮になるのは 上位ST終了後 / ST駆け抜け後（と設定変更時）
+    L.reason = e.stType !== 'normal' ? 'kage' : e.chain === 0 ? 'through' : 'none'; L.sub = { unato: false, sakura: false }; }
   else if (e.trigger === 'period') L.period = Math.min(e.period + 1, ceilOf(L).p);
   const label = `${BONUS_NAME[e.bonus]}を記録`;
   push('log', L, label);
@@ -1128,6 +1128,12 @@ function renderHistory() {
 /* ============ commit / render ============ */
 function commit() { persist(); render(); }
 function render() {
+  // 再描画でスクロール位置が先頭に戻らないよう保持する（iOS Safari は中身を差し替えると位置を失う）
+  const keep = ['#main', '#history', '#sheet-body'].map(s => [$(s), $(s) ? $(s).scrollTop : 0]);
+  renderAll();
+  for (const [el, y] of keep) if (el && el.scrollTop !== y) el.scrollTop = y;
+}
+function renderAll() {
   const home = S.ui.view === 'home';
   $('#home').hidden = !home; $('#histview').hidden = home; $('#botbar').hidden = !home;
   if (home) { const solo = renderMain(); $('#sheet').hidden = !sheetShown(); document.body.classList.toggle('docked', wideMq.matches); updateSheet(solo); } else { $('#sheet').hidden = true; document.body.classList.remove('docked'); renderHistory(); }
@@ -1145,7 +1151,7 @@ const A = {
   hint: d => { const it = CATS.flatMap(c => c.items).find(i => i.key === d.key); hintDelta(d.key, it.label, +d.d, d.range != null ? +d.range : S.ui.range); },
   cat: d => { S.ui.open.has(d.id) ? S.ui.open.delete(d.id) : S.ui.open.add(d.id); render(); },
   range: d => { S.ui.range = +d.v; render(); },
-  jump: d => { const el = document.getElementById(d.to); if (!el) return; if (d.to.startsWith('cat-')) S.ui.open.add(d.to.slice(4)); render(); const m = $('#main'), t = document.getElementById(d.to); m.scrollTo({ top: t.getBoundingClientRect().top - m.getBoundingClientRect().top + m.scrollTop - 52 }); },
+  jump: d => { const el = document.getElementById(d.to); if (!el) return; if (d.to.startsWith('cat-')) S.ui.open.add(d.to.slice(4)); render(); const m = $('#main'), t = document.getElementById(d.to); m.scrollTo({ top: t.getBoundingClientRect().top - m.getBoundingClientRect().top + m.scrollTop - 52, behavior: 'smooth' }); },
   tab: d => { S.ui.tab = d.tab; if (d.tab !== 'normal') S.ui.rtab = d.tab; render(); $('#main').scrollTop = 0; },
   rtab: d => { S.ui.rtab = d.v; if (S.ui.tab !== 'normal') S.ui.tab = d.v; render(); },
   'l-reason': d => { const L = clone(lg()); L.reason = d.v; L.period = Math.min(L.period, ceilOf(L).p); push('log', L, `状態: ${nameOf(REASONS, d.v)}`); },
