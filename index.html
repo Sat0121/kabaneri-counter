@@ -39,6 +39,10 @@ svg.ic{width:20px;height:20px;fill:currentColor;flex:none}
 .topbar .row{height:56px;display:flex;align-items:center;gap:8px}
 .topbar h1{font-size:clamp(17px,4.6vw,20px);font-weight:500;margin:0;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em}
 .topbar h1 small{font-size:12px;color:var(--on-surface-variant);font-weight:400;margin-left:8px}
+.tbtn{height:36px;padding:0 14px 0 10px;border-radius:var(--r-full);background:var(--secondary-container);color:var(--on-secondary-container);display:inline-flex;align-items:center;gap:6px;font-weight:500;font-size:13px;text-decoration:none;white-space:nowrap;flex:none}
+.tbtn svg.ic{width:18px;height:18px}
+.tbtn:hover{background:color-mix(in srgb,var(--on-secondary-container) 10%,var(--secondary-container))}
+@media (max-width:339.98px){.tbtn{padding:0 9px}.tbtn span{display:none}}
 .iconbtn{width:40px;height:40px;border-radius:var(--r-full);display:grid;place-items:center;color:var(--on-surface-variant);position:relative}
 .iconbtn:hover:not(:disabled){background:color-mix(in srgb,var(--on-surface) 8%,transparent)}
 .iconbtn:active:not(:disabled){background:color-mix(in srgb,var(--on-surface) 14%,transparent)}
@@ -296,6 +300,7 @@ pre.report{margin:0 auto;max-width:560px;background:var(--surface-container);bor
     <header class="topbar">
       <div class="row">
         <h1>甲鉄城のカバネリ<small>海門決戦 カウントツール</small></h1>
+        <a class="tbtn" data-act="picker" href="https://sat0121.github.io/asabu-kabaneri/" target="_blank" rel="noopener" aria-label="台選び（麻生ハッピーの島図と狙い台）"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v8h8V3H3zm6 6H5V5h4v4zm-6 4v8h8v-8H3zm6 6H5v-4h4v4zm4-16v8h8V3h-8zm6 6h-4V5h4v4zm-6 4v8h8v-8h-8zm6 6h-4v-4h4v4z"/></svg><span>台選び</span></a>
         <button class="iconbtn" data-act="menu" aria-label="メニュー" aria-haspopup="menu"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg></button>
       </div>
       <div class="tabs" role="tablist">
@@ -708,6 +713,7 @@ function applyTheme() {
   const sem = dark ? { 'hint-even': '#f8a8cf', 'hint-odd': '#9ecaff', 'hint-high': '#e9c349', 'hint-fix': '#8fd88f', 'hint-six': '#ffb4ab', good: '#8fd88f' }
     : { 'hint-even': '#a8326b', 'hint-odd': '#1f5fa8', 'hint-high': '#775a00', 'hint-fix': '#2a6b2a', 'hint-six': '#ba1a1a', good: '#2a6b2a' };
   for (const k in sem) el.style.setProperty('--' + k, sem[k]);
+  try { if (typeof window.Android === 'object') window.Android.setBars(el.style.getPropertyValue('--surface-container').trim() || (dark ? '#1d2024' : '#ededf4'), dark); } catch { }
 }
 sysDark.addEventListener?.('change', applyTheme);
 new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
@@ -1016,15 +1022,21 @@ function drawReport(sn) {
   return out;
 }
 const fileStamp = t => fmtDate(t, '').replace(/[ :]/g, m => (m === ' ' ? '_' : ''));
+// Androidアプリ版ではネイティブ側の保存・共有・コピーを使う（window.Android はアプリ内でのみ存在）
+const NATIVE = typeof window.Android === 'object' && window.Android;
+const pngB64 = canvas => canvas.toDataURL('image/png').split(',')[1];
 function saveImage(canvas, name) {
+  if (NATIVE) { let ok = false; try { ok = NATIVE.saveImage(pngB64(canvas), name); } catch { } return snack(ok ? '画像を保存しました（Pictures/Kabaneri）' : '画像を保存できませんでした'); }
   canvas.toBlob(b => { if (!b) return snack('画像を生成できませんでした'); const u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); snack('保存しました（保存されない場合は画像を長押し・右クリックで保存）'); }, 'image/png');
 }
 async function copyText(t) {
+  if (NATIVE) { try { NATIVE.copy(t); return snack('コピーしました'); } catch { } }
   try { await navigator.clipboard.writeText(t); snack('コピーしました'); }
   catch { const ta = document.createElement('textarea'); ta.value = t; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch { } ta.remove(); snack(ok ? 'コピーしました' : 'コピーできませんでした。テキストを選択してコピーしてください'); }
 }
 async function shareResult(sn, canvas) {
   const s = shortText(sn), text = `【スマスロ 甲鉄城のカバネリ遊技結果】\n${s ? s + '\n' : ''}#カバネリ #スマスロ #設定示唆ツール`;
+  if (NATIVE) { try { return NATIVE.share(text, pngB64(canvas), `kabaneri_record_${fileStamp(sn.at)}.png`); } catch { } }
   try {
     if (navigator.share) {
       const blob = await new Promise(r => canvas.toBlob(r, 'image/png')), file = blob && new File([blob], `kabaneri_record_${fileStamp(sn.at)}.png`, { type: 'image/png' });
@@ -1201,7 +1213,10 @@ document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]'); if (!el || el.disabled) return;
   if (el.matches('input')) return; // switches handled on change
   if (el.classList.contains('scrim') && e.target !== el) { if (e.target.closest('[data-stop]')) { const inner = e.target.closest('[data-stop] [data-act]'); if (!inner) return; } }
-  const t = e.target.closest('[data-act]'); A[t.dataset.act]?.(t.dataset);
+  const t = e.target.closest('[data-act]');
+  // 台選び: アプリ版はアプリ内の画面を開く。ブラウザ版はリンクのまま別タブで開く
+  if (t.dataset.act === 'picker') { if (NATIVE && typeof NATIVE.openPicker === 'function') { e.preventDefault(); NATIVE.openPicker(); } return; }
+  A[t.dataset.act]?.(t.dataset);
 });
 document.addEventListener('change', e => {
   const t = e.target;
@@ -1234,6 +1249,13 @@ $('#main').addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy =
 $('#main').addEventListener('touchend', e => { const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy; if (Math.abs(dx) < 80 || Math.abs(dx) < Math.abs(dy) * 2 || S.ui.view !== 'home') return; const order = ['normal', 'st', 'log'], to = order[order.indexOf(S.ui.tab) + (dx < 0 ? 1 : -1)]; if (to && !twoCol.matches) A.tab({ tab: to }); }, { passive: true });
 twoCol.addEventListener?.('change', render);
 window.addEventListener('hashchange', route);
+// 端末の「戻る」: 開いているものを1つ閉じる。何も開いていなければ false を返してアプリ側が終了する
+window.__kabaneriBack = () => {
+  const u = S.ui;
+  if (u.menu) u.menu = false; else if (u.entry) u.entry = null; else if (u.dialog) u.dialog = null; else if (u.result) u.result = null; else if (u.sheet && !wideMq.matches) u.sheet = false;
+  else if (u.view === 'history') { location.hash = ''; return true; } else return false;
+  render(); return true;
+};
 
 applyTheme(); buildSheet(); route(); flush();
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => { });
