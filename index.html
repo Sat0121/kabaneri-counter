@@ -1248,7 +1248,24 @@ function renderHistory() {
 }
 
 /* ============ commit / render ============ */
-function commit() { persist(); render(); }
+function commit() { persist(); render(); nativeCz(); }
+// Androidアプリ版: CZポイントの状態を通知に送る（ブラウザ版では何もしない）
+function nativeCz() {
+  if (typeof window.Android !== 'object' || typeof window.Android.czState !== 'function') return;
+  try {
+    const z = cz(); let u = '';
+    if (S.pos > 0) { const ks = S.order[S.pos - 1], h = S.hist[ks[ks.length - 1]]; if (h && h.i > 0) u = h.e[h.i].label; }
+    window.Android.czState(JSON.stringify({ m: { p: z.pts.mumei, h: !!z.high.mumei }, i: { p: z.pts.ikoma, h: !!z.high.ikoma }, u }));
+  } catch { }
+}
+// 通知のボタンから呼ばれる。add=ポイント加算 / high=高確の切り替え / enter=CZ突入 / undo=取り消し
+window.__kbNotify = (op, t, type) => {
+  if (op === 'add' && CZ_NAME[t] && POINTS[type]) { if (cz().high[t] && (type === 'normal' || type === 'flash')) return nativeCz(); addPoints(t, type); }
+  else if (op === 'high' && CZ_NAME[t]) mutCz(z => { z.high[t] = !z.high[t]; }, z => `${CZ_NAME[t]} 高確 ${z.high[t] ? 'ON' : 'OFF'}`);
+  else if (op === 'enter' && CZ_NAME[t]) enterCZ(t, false);
+  else if (op === 'undo') undo();
+  else nativeCz();
+};
 function render() {
   // 再描画でスクロール位置が先頭に戻らないよう保持する（iOS Safari は中身を差し替えると位置を失う）
   const keep = ['#main', '#history', '#sheet-body'].map(s => [$(s), $(s) ? $(s).scrollTop : 0]);
@@ -1375,6 +1392,11 @@ window.__kabaneriBack = () => {
 applyTheme(); buildSheet(); route(); flush();
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => { });
 window.__kabaneri = { estimate, singleFactor, S, buildPayload, snapshot };
+// アプリが止まっていた間に通知で押された操作を、押した順に反映する
+if (typeof window.Android === 'object') {
+  try { const q = JSON.parse(typeof window.Android.takePending === 'function' ? window.Android.takePending() : '[]'); if (q.length) { q.forEach(o => window.__kbNotify(o.op, o.t, o.type)); snack(`通知で入力した ${q.length}件 を反映しました`); } } catch { }
+  nativeCz();
+}
 })();
 
 </script>

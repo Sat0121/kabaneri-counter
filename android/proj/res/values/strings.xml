@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">カバネリ カウント</string>
+    <color name="ic_bg">#f3efe6</color>
+    <color name="mumei">#e0384f</color>
+    <color name="ikoma">#2fae6e</color>
+</resources>
